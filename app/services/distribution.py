@@ -8,14 +8,11 @@ from app.crud.donation import donation_crud
 from app.models import CharityProject, Donation
 
 
-async def distribution_on_create(
+def distribute(
         obj_to_fill: Union[Donation, CharityProject],
+        not_fully_invested: list[Union[Donation, CharityProject]],
         session: AsyncSession,
 ) -> None:
-    crud = (charity_project_crud if isinstance(obj_to_fill, Donation)
-            else donation_crud)
-    not_fully_invested = await crud.get_all_not_fully_invested(session)
-
     for instance in not_fully_invested:
         residual_obj_to_fill = (
             obj_to_fill.full_amount - obj_to_fill.invested_amount
@@ -33,7 +30,17 @@ async def distribution_on_create(
                     close_process(instance)
                 session.add(instance)
             obj_to_fill = close_process(obj_to_fill)
-            break
+            return
+
+
+async def distribution_on_create(
+        obj_to_fill: Union[Donation, CharityProject],
+        session: AsyncSession,
+) -> None:
+    crud = (charity_project_crud if isinstance(obj_to_fill, Donation)
+            else donation_crud)
+    not_fully_invested = await crud.get_all_not_fully_invested(session)
+    distribute(obj_to_fill, not_fully_invested, session)
     session.add(obj_to_fill)
     await session.commit()
     await session.refresh(obj_to_fill)
